@@ -1,0 +1,27 @@
+{
+  "run_id": "run_test_001",
+  "workflow": "company-assessment",
+  "created_at": "2026-03-28T10:00:00Z",
+  "status": "running",
+  "current_step": 0,
+  "steps": [
+    {
+      "step": 0,
+      "agent": "sales",
+      "instruction": "Research the company 'Grab Holdings' (GRAB). Find their latest revenue figures, key business segments, recent news, and competitive position in Southeast Asia. Output a structured company profile as company_profile.md and a JSON summary as company_data.json. Make sure to use the account research skill",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "agent": "finance",
+      "instruction": "Using the company profile and data from the previous step, perform a financial health assessment. Analyze revenue trends, profitability, debt levels, and cash flow. Score the company on a 1-10 scale across: revenue growth, profitability, balance sheet strength, and cash generation. Output an audit report as financial_audit.md and a scorecard as scorecard.json. Make sure to use the audit-support skill and financial-statements skill",
+      "status": "pending"
+    }
+  ],
+  "context": {
+    "company_name": "Grab Holdings",
+    "ticker": "GRAB",
+    "region": "Southeast Asia",
+    "requested_by": "jake@plazatech.co"
+  }
+}

@@ -1,0 +1,43 @@
+FROM python:3.12-slim
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+RUN pip install --no-cache-dir \
+    claude-agent-sdk \
+    boto3
+
+# Clone plugins
+RUN git clone --depth 1 https://github.com/anthropics/knowledge-work-plugins.git /opt/plugins
+
+# Create a non-root user
+RUN useradd -m -s /bin/bash agent
+
+# Working directory owned by agent user
+RUN mkdir -p /workspace/input /workspace/output && chown -R agent:agent /workspace
+
+# Make plugins readable
+RUN chown -R agent:agent /opt/plugins
+
+WORKDIR /workspace
+
+COPY --chown=agent:agent entrypoint.py /opt/entrypoint.py
+
+ENV PLUGIN_NAME=""
+ENV BUCKET=""
+ENV RUN_PREFIX=""
+ENV S3_ENDPOINT=""
+ENV AWS_ACCESS_KEY_ID=""
+ENV AWS_SECRET_ACCESS_KEY=""
+
+# Run as non-root
+USER agent
+
+ENTRYPOINT ["python", "/opt/entrypoint.py"]
