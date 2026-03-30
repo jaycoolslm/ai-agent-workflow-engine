@@ -28,11 +28,14 @@ RUN chown -R agent:agent /opt/plugins
 
 WORKDIR /workspace
 
+COPY --chown=agent:agent storage/ /opt/storage/
 COPY --chown=agent:agent entrypoint.py /opt/entrypoint.py
 
+ENV PYTHONPATH="/opt"
 ENV PLUGIN_NAME=""
 ENV BUCKET=""
 ENV RUN_PREFIX=""
+ENV STORAGE_BACKEND="s3"
 ENV S3_ENDPOINT=""
 ENV AWS_ACCESS_KEY_ID=""
 ENV AWS_SECRET_ACCESS_KEY=""

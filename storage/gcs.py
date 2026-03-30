@@ -1,0 +1,29 @@
+"""
+Google Cloud Storage backend.
+
+Requires: pip install google-cloud-storage
+
+TODO: Implement using google.cloud.storage client.
+"""
+
+from pathlib import Path
+
+
+class GCSStorage:
+    """Google Cloud Storage backend (not yet implemented)."""
+
+    def __init__(self, bucket: str, project: str = ""):
+        raise NotImplementedError(
+            "GCS backend not yet implemented. "
+            "Install google-cloud-storage and implement the StorageProtocol methods."
+        )
+
+    def read_json(self, key: str) -> dict: ...
+    def write_json(self, key: str, data: dict) -> None: ...
+    def read_bytes(self, key: str) -> bytes: ...
+    def write_bytes(self, key: str, data: bytes) -> None: ...
+    def list_keys(self, prefix: str) -> list[str]: ...
+    def copy_prefix(self, src_prefix: str, dst_prefix: str) -> None: ...
+    def key_exists(self, key: str) -> bool: ...
+    def download_prefix_to_dir(self, prefix: str, local_dir: Path) -> None: ...
+    def upload_dir_to_prefix(self, local_dir: Path, prefix: str) -> None: ...

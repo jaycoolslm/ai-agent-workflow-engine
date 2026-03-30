@@ -117,3 +117,7 @@ per cloud provider).
 ```bash
 docker compose down -v    # Stops MinIO, removes data volume
 ```
+
+## Cloud Deployment
+
+- **[AWS deployment guide](infra/aws/README.md)** — Deploy to AWS with Terraform (S3 + Lambda + ECS Fargate)
