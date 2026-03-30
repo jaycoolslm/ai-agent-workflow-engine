@@ -117,6 +117,16 @@ class DeepAgentsRuntime:
         return result_text
 
     @staticmethod
+    def _extract_path(tool_input) -> str:
+        """Extract file path from tool input, trying common key names."""
+        if not isinstance(tool_input, dict):
+            return str(tool_input)[:150]
+        for key in ("file_path", "path", "filename", "file", "file_name"):
+            if key in tool_input:
+                return str(tool_input[key])
+        return ""
+
+    @staticmethod
     def _log_tool_start(name: str, tool_input) -> None:
         """Log a tool invocation for observability."""
         if isinstance(tool_input, dict):
@@ -127,22 +137,23 @@ class DeepAgentsRuntime:
         if name in ("execute", "shell", "bash"):
             cmd = tool_input.get("command", "") if isinstance(tool_input, dict) else str(tool_input)
             print(f"  [BASH] {str(cmd)[:150]}", flush=True)
-        elif name in ("read_file",):
-            path = tool_input.get("path", "") if isinstance(tool_input, dict) else ""
-            print(f"  [READ] {path}", flush=True)
-        elif name in ("write_file",):
-            path = tool_input.get("path", "") if isinstance(tool_input, dict) else ""
+        elif name == "read_file":
+            path = DeepAgentsRuntime._extract_path(tool_input)
+            tag = "SKILL READ" if "SKILL.md" in path else "READ"
+            print(f"  [{tag}] {path}", flush=True)
+        elif name == "write_file":
+            path = DeepAgentsRuntime._extract_path(tool_input)
             print(f"  [WRITE] {path}", flush=True)
-        elif name in ("edit_file",):
-            path = tool_input.get("path", "") if isinstance(tool_input, dict) else ""
+        elif name == "edit_file":
+            path = DeepAgentsRuntime._extract_path(tool_input)
             print(f"  [EDIT] {path}", flush=True)
         elif name in ("ls", "glob"):
             print(f"  [GLOB] {input_str[:150]}", flush=True)
-        elif name in ("grep",):
+        elif name == "grep":
             print(f"  [GREP] {input_str[:150]}", flush=True)
-        elif name in ("write_todos",):
+        elif name == "write_todos":
             print(f"  [PLAN] {input_str[:200]}", flush=True)
-        elif name in ("task",):
+        elif name == "task":
             print(f"  [SUBAGENT] {input_str[:200]}", flush=True)
         else:
             print(f"  [TOOL] {name}: {input_str[:200]}", flush=True)
