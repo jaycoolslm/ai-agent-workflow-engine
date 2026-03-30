@@ -20,6 +20,8 @@ SUBNET_IDS = json.loads(os.environ["SUBNET_IDS"])
 SG_IDS = json.loads(os.environ["SECURITY_GROUP_IDS"])
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 CONTAINER_NAME = os.environ.get("CONTAINER_NAME", "agent")
+AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
+LLM_MODEL = os.environ.get("LLM_MODEL", "")
 
 
 def handler(event, context):
@@ -87,6 +89,8 @@ def handler(event, context):
                     "environment": [
                         {"name": "PLUGIN_NAME", "value": plugin_name},
                         {"name": "RUN_PREFIX", "value": run_prefix},
+                        {"name": "AGENT_RUNTIME", "value": AGENT_RUNTIME},
+                        {"name": "LLM_MODEL", "value": LLM_MODEL},
                     ],
                 }
             ]

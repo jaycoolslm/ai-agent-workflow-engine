@@ -27,5 +27,17 @@ services:
     # The router launches actual containers from this image via docker.
     entrypoint: ["echo", "Image built successfully"]
 
+  # Local Azure Blob Storage emulator
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service
+      - "10002:10002"  # Table service
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --skipApiVersionCheck"
+    volumes:
+      - azurite-data:/data
+
 volumes:
   minio-data:
+  azurite-data:

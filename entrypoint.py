@@ -1,23 +1,25 @@
 """
 Workflow agent container entrypoint.
 
-Reads manifest from object storage, loads the assigned knowledge-work plugin,
-executes the step via Claude Agent SDK, writes outputs back, advances the manifest.
+Reads manifest from object storage, loads the assigned Agent Skills (SKILL.md),
+executes the step via the configured runtime (Claude SDK, Deep Agents, or Codex),
+writes outputs back, advances the manifest.
 
 Storage backend is selected via STORAGE_BACKEND env var (s3, gcs, azure).
-Defaults to s3, which works with MinIO locally and real AWS S3 in production.
+Agent runtime is selected via AGENT_RUNTIME env var (claude, deepagent, codex).
 """
 
 import asyncio
 import json
 import os
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 from storage import get_storage
 from storage.protocol import StorageProtocol
+from runtime import get_runtime
+from runtime.protocol import AgentRuntimeProtocol
 
 # ---------------------------------------------------------------------------
 # Config from environment
@@ -27,72 +29,42 @@ RUN_PREFIX = os.environ.get("RUN_PREFIX", "")
 PLUGIN_NAME = os.environ.get("PLUGIN_NAME", "")
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "s3")
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")  # e.g. http://minio:9000
-PLUGINS_ROOT = Path("/opt/plugins")
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
+AZURE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
+AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
+SKILLS_ROOT = Path("/opt/skills")
 WORKSPACE = Path("/workspace")
 
 
 # ---------------------------------------------------------------------------
-# Plugin resolution
+# Skills resolution
 # ---------------------------------------------------------------------------
-def resolve_plugin_path(plugin_name: str) -> Path:
-    candidate = PLUGINS_ROOT / plugin_name
+def resolve_skills_dir(plugin_name: str) -> Path | None:
+    """Resolve PLUGIN_NAME to a skills directory containing SKILL.md subdirs."""
+    candidate = SKILLS_ROOT / plugin_name
     if not candidate.exists():
         available = [
             p.name
-            for p in PLUGINS_ROOT.iterdir()
+            for p in SKILLS_ROOT.iterdir()
             if p.is_dir() and not p.name.startswith(".")
-        ]
-        print(f"ERROR: Plugin '{plugin_name}' not found.")
+        ] if SKILLS_ROOT.exists() else []
+        print(f"WARNING: Skills directory '{plugin_name}' not found at {SKILLS_ROOT}.")
         print(f"Available: {available}")
-        sys.exit(1)
+        print(f"Continuing without skills.")
+        return None
     return candidate
 
 
-async def log_tool_usage(input_data, tool_use_id, context):
-    """Log every tool invocation for observability."""
-    tool_name = input_data.get("tool_name", "unknown")
-    tool_input = input_data.get("tool_input", {})
-
-    if tool_name == "Skill":
-        print(f"  [SKILL INVOKED] {json.dumps(tool_input, indent=2)}")
-    elif tool_name == "Bash":
-        cmd = tool_input.get("command", "")
-        print(f"  [BASH] {cmd[:150]}")
-    elif tool_name in ("Read", "Write", "Edit"):
-        path = tool_input.get("file_path", "")
-        print(f"  [{tool_name.upper()}] {path}")
-    elif tool_name in ("WebSearch", "WebFetch"):
-        query_or_url = tool_input.get("query", tool_input.get("url", ""))
-        print(f"  [{tool_name.upper()}] {query_or_url[:150]}")
-    else:
-        print(f"  [TOOL] {tool_name}")
-
-    return {}
-
-
 # ---------------------------------------------------------------------------
-# Agent execution
+# Prompt building
 # ---------------------------------------------------------------------------
-async def run_agent(
+def build_prompt(
     instruction: str,
-    plugin_path: Path,
     input_dir: Path,
     output_dir: Path,
     context: dict,
 ) -> str:
-    from claude_agent_sdk import (
-        AssistantMessage,
-        ClaudeAgentOptions,
-        ClaudeSDKClient,
-        HookMatcher,
-        ResultMessage,
-        SystemMessage,
-        TextBlock,
-        ToolUseBlock,
-        query,
-    )
-
-    # Build prompt
+    """Build the full agent prompt from workflow step data."""
     input_files = (
         [str(p.relative_to(input_dir)) for p in input_dir.rglob("*") if p.is_file()]
         if input_dir.exists()
@@ -109,99 +81,7 @@ async def run_agent(
             + "\n".join(f"- {f}" for f in input_files)
         )
     prompt_parts.append(f"\n## Output\nWrite all output files to: {output_dir}\n")
-    full_prompt = "\n".join(prompt_parts)
-
-    # Determine plugin load path
-    if (plugin_path / ".claude-plugin").exists():
-        plugin_load_path = str(plugin_path)
-    else:
-        plugin_load_path = str(PLUGINS_ROOT)
-
-    print(f"\n--- Agent Config ---")
-    print(f"  Plugin path: {plugin_load_path}")
-    print(f"  Working dir: {output_dir}")
-    print(f"  Permission mode: bypassPermissions")
-    print(f"  Disallowed tools: ComputerUse, NotebookEdit")
-    print(f"--------------------\n")
-
-    collected = []
-
-    async for message in query(
-        prompt=full_prompt,
-        options=ClaudeAgentOptions(
-            permission_mode="bypassPermissions",
-            disallowed_tools=["ComputerUse", "NotebookEdit"],
-            setting_sources=["project"],
-            plugins=[{"type": "local", "path": plugin_load_path}],
-            cwd=str(output_dir),
-            max_turns=30,
-        ),
-    ):
-        # --- System messages (init, plugin loading, etc) ---
-        if isinstance(message, SystemMessage):
-            if message.subtype == "init":
-                plugins = message.data.get("plugins", [])
-                commands = message.data.get("slash_commands", [])
-                print(f"  [INIT] Plugins loaded: {len(plugins)}")
-                for p in plugins:
-                    print(
-                        f"         - {p.get('name', 'unknown')} ({p.get('path', '')})"
-                    )
-                print(f"  [INIT] Slash commands: {len(commands)}")
-                for cmd in commands:
-                    if ":" in str(cmd):  # plugin-namespaced commands
-                        print(f"         - {cmd}")
-            else:
-                print(
-                    f"  [SYSTEM:{message.subtype}] {json.dumps(message.data, default=str)[:200]}"
-                )
-
-        # --- Assistant messages (text, tool calls) ---
-        elif isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    collected.append(block.text)
-                    print(block.text, flush=True)
-                elif isinstance(block, ToolUseBlock):
-                    if block.name == "Skill":
-                        print(
-                            f"  [SKILL CALL] {json.dumps(block.input)[:300]}",
-                            flush=True,
-                        )
-                    elif block.name == "Bash":
-                        print(
-                            f"  [BASH] {block.input.get('command', '')[:150]}",
-                            flush=True,
-                        )
-                    elif block.name in ("Read", "Write", "Edit"):
-                        print(
-                            f"  [{block.name.upper()}] {block.input.get('file_path', '')}",
-                            flush=True,
-                        )
-                    elif block.name in ("WebSearch", "WebFetch"):
-                        print(
-                            f"  [{block.name.upper()}] {block.input.get('query', block.input.get('url', ''))[:150]}",
-                            flush=True,
-                        )
-                    else:
-                        print(
-                            f"  [TOOL] {block.name}: {json.dumps(block.input)[:200]}",
-                            flush=True,
-                        )
-
-        # --- Result message (final) ---
-        elif isinstance(message, ResultMessage):
-            print(f"\n  [RESULT] subtype={message.subtype}")
-            print(f"  [RESULT] turns={message.num_turns}")
-            print(f"  [RESULT] duration={message.duration_ms}ms")
-            if message.total_cost_usd is not None:
-                print(f"  [RESULT] cost=${message.total_cost_usd:.4f}")
-            if message.usage:
-                print(
-                    f"  [RESULT] tokens in={message.usage.get('input_tokens', 0)} out={message.usage.get('output_tokens', 0)}"
-                )
-
-    return "\n".join(collected)
+    return "\n".join(prompt_parts)
 
 
 # ---------------------------------------------------------------------------
@@ -211,10 +91,24 @@ def _create_storage() -> StorageProtocol:
     if STORAGE_BACKEND == "s3":
         return get_storage("s3", bucket=BUCKET, endpoint_url=S3_ENDPOINT)
     if STORAGE_BACKEND == "gcs":
-        return get_storage("gcs", bucket=BUCKET)
+        return get_storage("gcs", bucket=BUCKET, project=GCP_PROJECT)
     if STORAGE_BACKEND == "azure":
-        return get_storage("azure", container=BUCKET)
+        return get_storage("azure", container=BUCKET, connection_string=AZURE_CONNECTION_STRING)
     raise ValueError(f"Unknown STORAGE_BACKEND: {STORAGE_BACKEND}")
+
+
+# ---------------------------------------------------------------------------
+# Runtime factory (composition root)
+# ---------------------------------------------------------------------------
+def _create_runtime() -> AgentRuntimeProtocol:
+    if AGENT_RUNTIME == "claude":
+        return get_runtime("claude")
+    if AGENT_RUNTIME == "deepagent":
+        model = os.environ.get("LLM_MODEL", "")
+        return get_runtime("deepagent", model=model)
+    if AGENT_RUNTIME == "codex":
+        return get_runtime("codex")
+    raise ValueError(f"Unknown AGENT_RUNTIME: {AGENT_RUNTIME}")
 
 
 # ---------------------------------------------------------------------------
@@ -224,23 +118,29 @@ async def main():
     if not PLUGIN_NAME:
         print("ERROR: PLUGIN_NAME is required")
         sys.exit(1)
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("ERROR: ANTHROPIC_API_KEY is required")
+    if AGENT_RUNTIME == "claude" and not os.environ.get("ANTHROPIC_API_KEY"):
+        print("ERROR: ANTHROPIC_API_KEY is required for claude runtime")
         sys.exit(1)
     if not BUCKET or not RUN_PREFIX:
         print("ERROR: BUCKET and RUN_PREFIX are required")
         sys.exit(1)
 
     storage = _create_storage()
-    plugin_path = resolve_plugin_path(PLUGIN_NAME)
+    runtime = _create_runtime()
+    skills_dir = resolve_skills_dir(PLUGIN_NAME)
 
     print(f"=== Agent Container ===")
     print(f"Plugin:     {PLUGIN_NAME}")
+    print(f"Runtime:    {AGENT_RUNTIME}")
     print(f"Backend:    {STORAGE_BACKEND}")
     print(f"Bucket:     {BUCKET}")
     print(f"Run prefix: {RUN_PREFIX}")
+    if skills_dir:
+        print(f"Skills dir: {skills_dir}")
     if S3_ENDPOINT:
         print(f"S3 endpoint: {S3_ENDPOINT}")
+    if GCP_PROJECT:
+        print(f"GCP project: {GCP_PROJECT}")
     print()
 
     # 1. Read manifest
@@ -278,14 +178,14 @@ async def main():
     step_input_prefix = f"{RUN_PREFIX}/step_{step_idx}/input"
     storage.download_prefix_to_dir(step_input_prefix, input_dir)
 
-    # 4. Run the agent
+    # 4. Build prompt and run the agent
+    prompt = build_prompt(step["instruction"], input_dir, output_dir, context)
+
     try:
-        agent_output = await run_agent(
-            instruction=step["instruction"],
-            plugin_path=plugin_path,
-            input_dir=input_dir,
+        agent_output = await runtime.execute(
+            prompt=prompt,
+            skills_dir=skills_dir,
             output_dir=output_dir,
-            context=context,
         )
 
         # 5. Upload outputs

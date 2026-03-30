@@ -12,10 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Python deps
 RUN pip install --no-cache-dir \
     claude-agent-sdk \
-    boto3
-
-# Clone plugins
-RUN git clone --depth 1 https://github.com/anthropics/knowledge-work-plugins.git /opt/plugins
+    boto3 \
+    google-cloud-storage \
+    azure-storage-blob \
+    azure-identity \
+    deepagents
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash agent
@@ -23,12 +24,11 @@ RUN useradd -m -s /bin/bash agent
 # Working directory owned by agent user
 RUN mkdir -p /workspace/input /workspace/output && chown -R agent:agent /workspace
 
-# Make plugins readable
-RUN chown -R agent:agent /opt/plugins
-
 WORKDIR /workspace
 
 COPY --chown=agent:agent storage/ /opt/storage/
+COPY --chown=agent:agent runtime/ /opt/runtime/
+COPY --chown=agent:agent skills/ /opt/skills/
 COPY --chown=agent:agent entrypoint.py /opt/entrypoint.py
 
 ENV PYTHONPATH="/opt"
@@ -37,6 +37,11 @@ ENV BUCKET=""
 ENV RUN_PREFIX=""
 ENV STORAGE_BACKEND="s3"
 ENV S3_ENDPOINT=""
+ENV GCP_PROJECT=""
+ENV AZURE_STORAGE_ACCOUNT=""
+ENV AZURE_STORAGE_CONNECTION_STRING=""
+ENV AGENT_RUNTIME="claude"
+ENV LLM_MODEL=""
 ENV AWS_ACCESS_KEY_ID=""
 ENV AWS_SECRET_ACCESS_KEY=""
 

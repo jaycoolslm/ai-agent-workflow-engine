@@ -1,0 +1,22 @@
+services:
+  # Local GCS-compatible object store
+  fake-gcs-server:
+    image: fsouza/fake-gcs-server
+    command: ["-scheme", "http", "-port", "4443", "-backend", "memory"]
+    ports:
+      - "4443:4443"   # GCS API
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4443/storage/v1/b"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # The agent container image (built once, launched per step by the router)
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: workflow-agent:local
+    # This service exists only to build the image.
+    # The router launches actual containers from this image via docker.
+    entrypoint: ["echo", "Image built successfully"]
