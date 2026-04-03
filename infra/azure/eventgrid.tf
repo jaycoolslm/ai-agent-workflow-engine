@@ -2,7 +2,7 @@ resource "azurerm_eventgrid_system_topic" "storage" {
   name                   = "${var.project_name}-storage-events"
   resource_group_name    = azurerm_resource_group.main.name
   location               = azurerm_resource_group.main.location
-  source_arm_resource_id = azurerm_storage_account.workflows.id
+  source_resource_id = azurerm_storage_account.workflows.id
   topic_type             = "Microsoft.Storage.StorageAccounts"
 
   tags = azurerm_resource_group.main.tags
@@ -26,4 +26,6 @@ resource "azurerm_eventgrid_system_topic_event_subscription" "manifest_trigger" 
   subject_filter {
     subject_ends_with = "manifest.json"
   }
+
+  depends_on = [null_resource.wait_for_function_registration]
 }

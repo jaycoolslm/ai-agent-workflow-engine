@@ -18,19 +18,19 @@ output "resource_group_name" {
   value       = azurerm_resource_group.main.name
 }
 
-output "acr_push_commands" {
-  description = "Commands to build and push the agent image"
+output "next_steps" {
+  description = "Post-deployment instructions"
   value       = <<-EOT
-    # Login to ACR
+    Deployment complete! Next: build and push the agent image, then trigger a workflow.
+
+    # 1. Login to ACR
     az acr login --name ${azurerm_container_registry.agent.name}
 
-    # Build and push (run from repo root)
-    docker build -f Dockerfile.agent -t ${azurerm_container_registry.agent.login_server}/agent-workflow-engine/agent:${var.agent_image_tag} .
+    # 2. Build and push agent image for linux/amd64 (run from repo root)
+    docker build --platform linux/amd64 -f Dockerfile.agent -t ${azurerm_container_registry.agent.login_server}/agent-workflow-engine/agent:${var.agent_image_tag} .
     docker push ${azurerm_container_registry.agent.login_server}/agent-workflow-engine/agent:${var.agent_image_tag}
-  EOT
-}
 
-output "trigger_workflow_command" {
-  description = "Command to trigger a sample workflow"
-  value       = "az storage blob upload --account-name ${azurerm_storage_account.workflows.name} --container-name ${local.container_name} --name runs/run_001/manifest.json --file sample-manifest.json --auth-mode login"
+    # 3. Trigger a workflow
+    az storage blob upload --account-name ${azurerm_storage_account.workflows.name} --container-name ${local.container_name} --name runs/run_001/manifest.json --file sample-manifest.json --auth-mode login
+  EOT
 }

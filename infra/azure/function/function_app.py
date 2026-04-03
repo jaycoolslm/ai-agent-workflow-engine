@@ -43,13 +43,17 @@ KEYVAULT_URI = os.environ.get("KEYVAULT_URI", "")
 CONTAINER_CPU = float(os.environ.get("CONTAINER_CPU", "1.0"))
 CONTAINER_MEMORY_GB = float(os.environ.get("CONTAINER_MEMORY_GB", "4.0"))
 MANAGED_IDENTITY_ID = os.environ.get("MANAGED_IDENTITY_ID", "")
+FUNCTION_IDENTITY_CLIENT_ID = os.environ.get("FUNCTION_IDENTITY_CLIENT_ID", "")
 MANAGED_IDENTITY_CLIENT_ID = os.environ.get("MANAGED_IDENTITY_CLIENT_ID", "")
 SUBSCRIPTION_ID = os.environ.get("SUBSCRIPTION_ID", "")
 LOG_ANALYTICS_WORKSPACE_ID = os.environ.get("LOG_ANALYTICS_WORKSPACE_ID", "")
+LOG_ANALYTICS_WORKSPACE_KEY = os.environ.get("LOG_ANALYTICS_WORKSPACE_KEY", "")
 AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
 LLM_MODEL = os.environ.get("LLM_MODEL", "")
 
-credential = DefaultAzureCredential()
+credential = DefaultAzureCredential(
+    managed_identity_client_id=FUNCTION_IDENTITY_CLIENT_ID
+)
 
 
 def _get_blob_service() -> BlobServiceClient:
@@ -122,6 +126,17 @@ def router(event: func.EventGridEvent):
     # reads manifest, sees "running", returns here.
     if step_status != "pending":
         logging.info(f"Step {step_idx} is '{step_status}', not 'pending'. No action.")
+
+        # Clean up completed/failed container groups to avoid clutter
+        if step_status in ("complete", "failed"):
+            group_name = f"{run_prefix.replace('/', '-')}-step-{step_idx}"
+            try:
+                aci_client = ContainerInstanceManagementClient(credential, SUBSCRIPTION_ID)
+                aci_client.container_groups.begin_delete(RESOURCE_GROUP_NAME, group_name)
+                logging.info(f"Deleted container group '{group_name}'")
+            except Exception as e:
+                logging.warning(f"Failed to delete container group '{group_name}': {e}")
+
         return
 
     # Mark step as running
@@ -170,6 +185,7 @@ def router(event: func.EventGridEvent):
                         EnvironmentVariable(name="RUN_PREFIX", value=run_prefix),
                         EnvironmentVariable(name="PLUGIN_NAME", value=plugin_name),
                         EnvironmentVariable(name="AZURE_STORAGE_ACCOUNT", value=STORAGE_ACCOUNT_NAME),
+                        EnvironmentVariable(name="AZURE_CLIENT_ID", value=MANAGED_IDENTITY_CLIENT_ID),
                         EnvironmentVariable(name="AGENT_RUNTIME", value=AGENT_RUNTIME),
                         EnvironmentVariable(name="LLM_MODEL", value=LLM_MODEL),
                         EnvironmentVariable(name="ANTHROPIC_API_KEY", secure_value=api_key),
@@ -179,7 +195,7 @@ def router(event: func.EventGridEvent):
             diagnostics=ContainerGroupDiagnostics(
                 log_analytics=LogAnalytics(
                     workspace_id=LOG_ANALYTICS_WORKSPACE_ID,
-                    workspace_key="",  # Populated at deploy time or via Key Vault
+                    workspace_key=LOG_ANALYTICS_WORKSPACE_KEY,
                 )
             ) if LOG_ANALYTICS_WORKSPACE_ID else None,
         )

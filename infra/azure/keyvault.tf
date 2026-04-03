@@ -19,10 +19,18 @@ resource "azurerm_role_assignment" "deployer_keyvault_admin" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
+# Wait for Azure RBAC propagation before creating secrets.
+# Without this, the role assignment exists but hasn't propagated,
+# causing a partial failure that leaves the secret in Azure but not in Terraform state.
+resource "time_sleep" "wait_for_rbac" {
+  depends_on      = [azurerm_role_assignment.deployer_keyvault_admin]
+  create_duration = "30s"
+}
+
 resource "azurerm_key_vault_secret" "anthropic_api_key" {
   name         = "anthropic-api-key"
   value        = var.anthropic_api_key
   key_vault_id = azurerm_key_vault.main.id
 
-  depends_on = [azurerm_role_assignment.deployer_keyvault_admin]
+  depends_on = [time_sleep.wait_for_rbac]
 }

@@ -28,9 +28,13 @@ class AzureBlobStorage:
                 )
             from azure.identity import DefaultAzureCredential
 
+            managed_identity_client_id = os.environ.get("AZURE_CLIENT_ID", "")
+            credential = DefaultAzureCredential(
+                managed_identity_client_id=managed_identity_client_id or None,
+            )
             self._service = BlobServiceClient(
                 account_url=f"https://{account_name}.blob.core.windows.net",
-                credential=DefaultAzureCredential(),
+                credential=credential,
             )
 
         self._container_name = container
