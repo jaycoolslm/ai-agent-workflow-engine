@@ -5,14 +5,40 @@ Test the full cloud-agnostic workflow engine locally using Docker and MinIO.
 ## What's Here
 
 ```
-workflow-poc/
-├── docker-compose.yml      # MinIO + agent image build
-├── Dockerfile.agent        # The universal agent container
-├── entrypoint.py           # Agent lifecycle (read manifest, run Claude, write outputs)
-├── router.py               # Local stand-in for cloud event trigger
-├── test_plumbing.py        # Validates all wiring WITHOUT calling Claude
-├── sample-manifest.json    # Example 2-step workflow (sales -> finance)
-└── README.md               # You are here
+workflow-engine/
+├── docker-compose.yml          # MinIO + Azurite + agent image build
+├── docker-compose.nfs.yml      # NFS server + agent with S3 Files mount
+├── docker-compose.gcs.yml      # fake-gcs-server variant
+├── Dockerfile.agent            # The universal agent container
+├── entrypoint.py               # Agent lifecycle (read manifest, run agent, write outputs)
+├── router.py                   # Local stand-in for cloud event trigger
+├── storage/                    # Cloud-agnostic storage abstraction
+│   ├── protocol.py             # StorageProtocol interface
+│   ├── factory.py              # Backend factory (s3, gcs, azure, nfs)
+│   ├── s3.py                   # AWS S3 / MinIO backend
+│   ├── gcs.py                  # Google Cloud Storage backend
+│   ├── azure.py                # Azure Blob Storage backend
+│   └── nfs.py                  # [NEW] Amazon S3 Files NFS mount backend
+├── runtime/                    # LLM-agnostic agent runtime abstraction
+│   ├── protocol.py             # AgentRuntimeProtocol interface
+│   ├── factory.py              # Backend factory (claude, deepagent, codex, openharness)
+│   ├── claude_sdk.py           # Claude Agent SDK runtime
+│   ├── deep_agents.py          # LangChain Deep Agents runtime
+│   ├── codex_sdk.py            # Codex runtime (stub)
+│   └── openharness.py          # [NEW] OpenHarness agent runtime
+├── evaluation/                 # [NEW] AI output quality evaluation
+│   └── __init__.py             # Hallucination detection, completeness checks
+├── openharness/                # [NEW] Node.js deps for OpenHarness runtime
+│   └── package.json            # @openharness/core + AI SDK providers
+├── skills/                     # Agent skill definitions (SKILL.md format)
+├── infra/                      # Cloud deployment (AWS/Azure/GCP Terraform)
+├── test_plumbing.py            # S3 plumbing test (MinIO)
+├── test_plumbing_nfs.py        # [NEW] NFS storage backend test
+├── test_openharness_runtime.py # [NEW] OpenHarness runtime test
+├── test_evaluation.py          # [NEW] AI evaluation module test
+├── test_integration.py         # [NEW] Full integration test
+├── sample-manifest.json        # Example 2-step workflow
+└── README.md                   # You are here
 ```
 
 ## Prerequisites
@@ -20,25 +46,70 @@ workflow-poc/
 - Docker Desktop running
 - Python 3.10+ on your host (for router and tests)
 - `pip install boto3` on your host
-- An Anthropic API key (only needed for the real run, not the plumbing test)
+- An Anthropic API key (only needed for Claude runtime, not plumbing tests)
 
-## Step 1: Validate the Plumbing (No API Key Needed)
+## Architecture
 
-This tests S3 operations, manifest state machine, file handover, context
-accumulation, and error handling. No Claude calls, no API key, no agent
-containers. Just MinIO and Python.
+### Storage Backends
 
+| Backend | Use Case | Env Vars |
+|---------|----------|----------|
+| `s3` (default) | AWS S3, MinIO, any S3-compatible | `STORAGE_BACKEND=s3 S3_ENDPOINT=...` |
+| `nfs` **NEW** | Amazon S3 Files NFS mount | `STORAGE_BACKEND=nfs NFS_MOUNT_PATH=/mnt/s3` |
+| `gcs` | Google Cloud Storage | `STORAGE_BACKEND=gcs GCP_PROJECT=...` |
+| `azure` | Azure Blob Storage | `STORAGE_BACKEND=azure AZURE_STORAGE_CONNECTION_STRING=...` |
+
+### Agent Runtimes
+
+| Runtime | Use Case | Env Vars |
+|---------|----------|----------|
+| `claude` (default) | Claude Agent SDK | `AGENT_RUNTIME=claude ANTHROPIC_API_KEY=...` |
+| `openharness` **NEW** | OpenHarness (LLM-agnostic) | `AGENT_RUNTIME=openharness LLM_MODEL=gpt-4o OPENHARNESS_PROVIDER=openai` |
+| `deepagent` | LangChain Deep Agents | `AGENT_RUNTIME=deepagent LLM_MODEL=openai:gpt-4o` |
+| `codex` | Codex SDK (stub) | `AGENT_RUNTIME=codex` |
+
+### Data Flow: S3 Copy vs NFS Mount
+
+**Before (S3 Copy — high latency):**
+```
+Agent A → write output → S3 PutObject → S3 CopyObject → S3 GetObject → Agent B reads
+         (upload)        (copy in S3)     (download)
+```
+
+**After (S3 Files NFS — zero latency):**
+```
+Agent A → write to /mnt/s3/step_0/output/ → Agent B reads /mnt/s3/step_1/input/
+         (local filesystem write)            (local filesystem read, or symlink)
+```
+
+## Step 1: Run Tests (No API Key Needed)
+
+### NFS Storage Test (no Docker needed)
 ```bash
-# Start MinIO
-docker compose up minio -d
+python test_plumbing_nfs.py
+```
 
-# Wait a few seconds for it to be ready, then run tests
+### OpenHarness Runtime Test (no Docker needed)
+```bash
+python test_openharness_runtime.py
+```
+
+### AI Evaluation Test (no Docker needed)
+```bash
+python test_evaluation.py
+```
+
+### Full Integration Test (no Docker needed)
+```bash
+python test_integration.py
+```
+
+### Original S3 Plumbing Test (needs MinIO)
+```bash
+docker compose up minio -d
 pip install boto3
 python test_plumbing.py
 ```
-
-You should see all 10 tests pass. You can also open http://localhost:9001
-(minioadmin / minioadmin) to browse the bucket contents visually.
 
 ## Step 2: Build the Agent Image
 
@@ -46,71 +117,48 @@ You should see all 10 tests pass. You can also open http://localhost:9001
 docker compose build agent
 ```
 
-This bakes in Python 3.12, Node.js 22, the Claude Agent SDK, boto3,
-and the full knowledge-work-plugins repo. Takes a few minutes the first
-time; subsequent builds use Docker layer caching.
+This bakes in Python 3.12, Node.js 22, the Claude Agent SDK,
+OpenHarness core, boto3, and all AI SDK providers.
 
 ## Step 3: Run a Real Workflow
 
+### With Claude (default)
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-
-# Seed a sample workflow and run it
 python router.py --bucket workflows --run-prefix runs/run_001 --seed
 ```
 
-This will:
-1. Create the `workflows` bucket in MinIO
-2. Upload the sample manifest (sales research on Grab Holdings, then finance audit)
-3. Mark step 0 as `running` and launch the `sales` agent container
-4. When the sales container finishes, it advances the manifest
-5. The router sees step 1 is `pending`, marks it `running`, launches `finance`
-6. When finance finishes, the workflow is marked `complete`
-
-Watch the terminal for agent output. Inspect results in MinIO console at
-http://localhost:9001.
-
-## Step 4: Run a Custom Workflow
-
-Create your own manifest:
-
+### With OpenHarness (OpenAI)
 ```bash
-python router.py \
-  --bucket workflows \
-  --run-prefix runs/custom_001 \
-  --seed-file my-manifest.json
+export OPENAI_API_KEY=sk-...
+AGENT_RUNTIME=openharness LLM_MODEL=gpt-4o python router.py \
+  --bucket workflows --run-prefix runs/run_001 --seed
 ```
 
-Available plugin names (matching knowledge-work-plugins repo):
-- sales
-- finance
-- marketing
-- legal
-- data
-- engineering
-- customer-support
-- product-management
-- productivity
-- enterprise-search
-- bio-research
+### With NFS Storage
+```bash
+# Start NFS server
+docker compose -f docker-compose.nfs.yml up nfs-server -d
+
+# Run with NFS backend
+STORAGE_BACKEND=nfs NFS_MOUNT_PATH=/mnt/s3 python router.py \
+  --bucket workflows --run-prefix runs/run_001 --seed
+```
 
 ## What This Proves
-
-The local POC validates that the architecture works end-to-end:
 
 | Concern                  | Local (MinIO + Docker)         | Production equivalent          |
 |--------------------------|-------------------------------|-------------------------------|
 | Object store             | MinIO on localhost:9000       | S3 / Blob Storage / GCS      |
+| Object store (NFS)       | Local temp dir / NFS server   | Amazon S3 Files NFS Mount    |
 | Event trigger            | router.py polling             | S3 Event -> Lambda            |
 | Container runtime        | docker run                    | Fargate / Cloud Run / ACA    |
 | Manifest state machine   | Identical                     | Identical                     |
-| File handover            | S3 copy (identical API)       | S3 copy (identical API)       |
+| File handover (S3)       | S3 copy (identical API)       | S3 copy (identical API)       |
+| File handover (NFS)      | Local copy / symlink          | NFS copy / symlink            |
+| Agent runtime            | Claude / OpenHarness          | Claude / OpenHarness          |
+| Output evaluation        | Offline evaluator             | Offline evaluator             |
 | Agent container          | Same image                    | Same image                    |
-
-The agent container, the entrypoint, the manifest format, and the S3
-operations are all identical between local and production. The ONLY
-thing that changes is the router implementation (50 lines of glue code
-per cloud provider).
 
 ## Cleanup
 

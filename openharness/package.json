@@ -1,0 +1,15 @@
+{
+  "name": "workflow-agent-openharness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenHarness runtime dependencies for the workflow agent container",
+  "dependencies": {
+    "@openharness/core": "^0.6.1",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "@ai-sdk/mistral": "^1.0.0",
+    "ai": "^4.0.0"
+  }
+}

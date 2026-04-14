@@ -31,6 +31,7 @@ STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "s3")
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")  # e.g. http://minio:9000
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 AZURE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
+NFS_MOUNT_PATH = os.environ.get("NFS_MOUNT_PATH", "/mnt/s3")  # S3 Files NFS mount
 AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
 SKILLS_ROOT = Path("/opt/skills")
 WORKSPACE = Path("/workspace")
@@ -94,6 +95,8 @@ def _create_storage() -> StorageProtocol:
         return get_storage("gcs", bucket=BUCKET, project=GCP_PROJECT)
     if STORAGE_BACKEND == "azure":
         return get_storage("azure", container=BUCKET, connection_string=AZURE_CONNECTION_STRING)
+    if STORAGE_BACKEND == "nfs":
+        return get_storage("nfs", bucket=BUCKET, mount_path=NFS_MOUNT_PATH)
     raise ValueError(f"Unknown STORAGE_BACKEND: {STORAGE_BACKEND}")
 
 
@@ -108,6 +111,10 @@ def _create_runtime() -> AgentRuntimeProtocol:
         return get_runtime("deepagent", model=model)
     if AGENT_RUNTIME == "codex":
         return get_runtime("codex")
+    if AGENT_RUNTIME == "openharness":
+        model = os.environ.get("LLM_MODEL", "gpt-4o")
+        provider = os.environ.get("OPENHARNESS_PROVIDER", "openai")
+        return get_runtime("openharness", model=model, provider=provider)
     raise ValueError(f"Unknown AGENT_RUNTIME: {AGENT_RUNTIME}")
 
 

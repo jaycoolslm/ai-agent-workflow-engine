@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     ca-certificates \
+    nfs-common \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -18,11 +19,15 @@ RUN pip install --no-cache-dir \
     azure-identity \
     deepagents
 
+# OpenHarness Node.js deps
+COPY openharness/package.json /opt/openharness/package.json
+RUN cd /opt/openharness && npm install --production
+
 # Create a non-root user
 RUN useradd -m -s /bin/bash agent
 
 # Working directory owned by agent user
-RUN mkdir -p /workspace/input /workspace/output && chown -R agent:agent /workspace
+RUN mkdir -p /workspace/input /workspace/output /mnt/s3 && chown -R agent:agent /workspace /mnt/s3
 
 WORKDIR /workspace
 
@@ -32,16 +37,19 @@ COPY --chown=agent:agent skills/ /opt/skills/
 COPY --chown=agent:agent entrypoint.py /opt/entrypoint.py
 
 ENV PYTHONPATH="/opt"
+ENV NODE_PATH="/opt/openharness/node_modules"
 ENV PLUGIN_NAME=""
 ENV BUCKET=""
 ENV RUN_PREFIX=""
 ENV STORAGE_BACKEND="s3"
 ENV S3_ENDPOINT=""
+ENV NFS_MOUNT_PATH="/mnt/s3"
 ENV GCP_PROJECT=""
 ENV AZURE_STORAGE_ACCOUNT=""
 ENV AZURE_STORAGE_CONNECTION_STRING=""
 ENV AGENT_RUNTIME="claude"
 ENV LLM_MODEL=""
+ENV OPENHARNESS_PROVIDER="openai"
 ENV AWS_ACCESS_KEY_ID=""
 ENV AWS_SECRET_ACCESS_KEY=""
 
