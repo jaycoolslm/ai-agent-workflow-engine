@@ -211,7 +211,10 @@ async def main():
         d.mkdir(parents=True)
 
     step_input_prefix = f"{RUN_PREFIX}/step_{step_idx}/input"
-    storage.download_prefix_to_dir(step_input_prefix, input_dir)
+    if provider:
+        provider.download_prefix(step_input_prefix, input_dir)
+    else:
+        storage.download_prefix_to_dir(step_input_prefix, input_dir)
 
     # 4. Build prompt and run the agent
     prompt = build_prompt(step["instruction"], input_dir, output_dir, context)
@@ -225,7 +228,10 @@ async def main():
 
         # 5. Upload outputs
         step_output_prefix = f"{RUN_PREFIX}/step_{step_idx}/output"
-        storage.upload_dir_to_prefix(output_dir, step_output_prefix)
+        if provider:
+            provider.upload_dir(output_dir, step_output_prefix)
+        else:
+            storage.upload_dir_to_prefix(output_dir, step_output_prefix)
 
         # 6. Update shared context
         output_files = [
@@ -255,10 +261,12 @@ async def main():
                 inputs_from = [step_idx]
 
             for prior_idx in inputs_from:
-                storage.copy_prefix(
-                    f"{RUN_PREFIX}/step_{prior_idx}/output/",
-                    f"{RUN_PREFIX}/step_{next_idx}/input/",
-                )
+                src = f"{RUN_PREFIX}/step_{prior_idx}/output/"
+                dst = f"{RUN_PREFIX}/step_{next_idx}/input/"
+                if provider:
+                    provider.copy_prefix(src, dst)
+                else:
+                    storage.copy_prefix(src, dst)
         else:
             manifest["status"] = "complete"
             manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
