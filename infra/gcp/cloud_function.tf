@@ -52,7 +52,7 @@ resource "google_cloudfunctions2_function" "router" {
 
   event_trigger {
     event_type   = "google.cloud.storage.object.v1.finalized"
-    retry_policy = "DO_NOT_RETRY"
+    retry_policy = "RETRY_POLICY_DO_NOT_RETRY"
 
     event_filters {
       attribute = "bucket"
