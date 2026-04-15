@@ -18,6 +18,7 @@ from pathlib import Path
 
 from storage import get_storage
 from storage.protocol import StorageProtocol
+from storage_provider import get_storage_provider, StorageProvider
 from runtime import get_runtime
 from runtime.protocol import AgentRuntimeProtocol
 
@@ -28,6 +29,7 @@ BUCKET = os.environ.get("BUCKET", "")
 RUN_PREFIX = os.environ.get("RUN_PREFIX", "")
 PLUGIN_NAME = os.environ.get("PLUGIN_NAME", "")
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "s3")
+STORAGE_MODE = os.environ.get("STORAGE_MODE", "")  # 's3' or 'direct_mount'
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")  # e.g. http://minio:9000
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 AZURE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
@@ -100,6 +102,23 @@ def _create_storage() -> StorageProtocol:
     raise ValueError(f"Unknown STORAGE_BACKEND: {STORAGE_BACKEND}")
 
 
+def _create_storage_provider() -> StorageProvider | None:
+    """Create an optional StorageProvider for file-level operations.
+
+    When STORAGE_MODE is set (e.g. 'direct_mount'), this returns a
+    high-performance provider that bypasses the boto3 API pipeline. When
+    unset, returns None and the classic StorageProtocol path is used.
+    """
+    if not STORAGE_MODE:
+        return None
+    return get_storage_provider(
+        mode=STORAGE_MODE,
+        bucket=BUCKET,
+        endpoint_url=S3_ENDPOINT,
+        mount_path=NFS_MOUNT_PATH,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Runtime factory (composition root)
 # ---------------------------------------------------------------------------
@@ -139,6 +158,7 @@ async def main():
         sys.exit(1)
 
     storage = _create_storage()
+    provider = _create_storage_provider()
     runtime = _create_runtime()
     skills_dir = resolve_skills_dir(PLUGIN_NAME)
 
@@ -146,6 +166,8 @@ async def main():
     print(f"Plugin:     {PLUGIN_NAME}")
     print(f"Runtime:    {AGENT_RUNTIME}")
     print(f"Backend:    {STORAGE_BACKEND}")
+    if STORAGE_MODE:
+        print(f"Mode:       {STORAGE_MODE} (StorageProvider)")
     print(f"Bucket:     {BUCKET}")
     print(f"Run prefix: {RUN_PREFIX}")
     if skills_dir:

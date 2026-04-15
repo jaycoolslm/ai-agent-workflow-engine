@@ -36,6 +36,7 @@ AGENT_IMAGE = os.environ.get("AGENT_IMAGE", "workflow-agent:local")
 # Agent runtime config
 AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
 LLM_MODEL = os.environ.get("LLM_MODEL", "")
+STORAGE_MODE = os.environ.get("STORAGE_MODE", "")  # 's3' or 'direct_mount'
 
 # Your Anthropic API key
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -105,6 +106,7 @@ def launch_agent_container(
         "-e", f"OPENAI_API_KEY={OPENAI_API_KEY}",
         "-e", f"AGENT_RUNTIME={AGENT_RUNTIME}",
         "-e", f"LLM_MODEL={LLM_MODEL}",
+        "-e", f"STORAGE_MODE={STORAGE_MODE}",
         AGENT_IMAGE,
     ]
 
