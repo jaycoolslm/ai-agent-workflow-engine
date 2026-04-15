@@ -24,11 +24,11 @@ from runtime.openharness import OpenHarnessRuntime
 from runtime.factory import get_runtime
 
 
-def test_passed(name):
+def _passed(name):
     print(f"  PASS  {name}")
 
 
-def test_failed(name, detail=""):
+def _failed(name, detail=""):
     print(f"  FAIL  {name}")
     if detail:
         print(f"        {detail}")
@@ -48,9 +48,9 @@ def main():
     try:
         runtime = get_runtime("openharness", model="gpt-4o", provider="openai")
         assert isinstance(runtime, OpenHarnessRuntime)
-        test_passed("OpenHarness runtime registered in factory")
+        _passed("OpenHarness runtime registered in factory")
     except Exception as e:
-        test_failed("Factory registration", str(e))
+        _failed("Factory registration", str(e))
 
     # ------------------------------------------------------------------
     # Test 2: Provider configs
@@ -66,7 +66,7 @@ def main():
         rt = OpenHarnessRuntime(model="test-model", provider=provider_name)
         imp, init = rt._get_provider_config()
         assert expected_import in imp, f"Expected {expected_import} in {imp}"
-    test_passed(f"All {len(providers)} providers configured correctly")
+    _passed(f"All {len(providers)} providers configured correctly")
 
     # ------------------------------------------------------------------
     # Test 3: Custom provider (OpenAI-compatible)
@@ -76,7 +76,7 @@ def main():
     imp, init = rt._get_provider_config()
     assert "createOpenAI" in imp
     assert "OPENAI_BASE_URL" in init
-    test_passed("Custom provider uses createOpenAI with base URL")
+    _passed("Custom provider uses createOpenAI with base URL")
 
     # ------------------------------------------------------------------
     # Test 4: Runner script generation
@@ -100,7 +100,7 @@ def main():
         assert "maxSteps: 20" in script
         assert "Research TestCorp" in script
         assert "@openharness/core" in script
-        test_passed("Runner script contains all required elements")
+        _passed("Runner script contains all required elements")
 
     # ------------------------------------------------------------------
     # Test 5: Skills injection
@@ -128,7 +128,7 @@ def main():
 
         assert "Skill: test-skill" in script
         assert "You can do X, Y, Z" in script
-        test_passed("Skills injected into system prompt")
+        _passed("Skills injected into system prompt")
 
     # ------------------------------------------------------------------
     # Test 6: Prompt escaping
@@ -150,7 +150,7 @@ def main():
         # The backticks and ${} should be escaped
         assert "\\`backticks\\`" in script
         assert "\\${variables}" in script
-        test_passed("Backticks and template expressions escaped correctly")
+        _passed("Backticks and template expressions escaped correctly")
 
     # ------------------------------------------------------------------
     # Test 7: OpenHarness package.json exists
@@ -162,7 +162,7 @@ def main():
     pkg = json.loads(pkg_path.read_text())
     assert "@openharness/core" in pkg["dependencies"]
     assert pkg["type"] == "module"
-    test_passed("package.json has @openharness/core dependency")
+    _passed("package.json has @openharness/core dependency")
 
     # ------------------------------------------------------------------
     # Summary

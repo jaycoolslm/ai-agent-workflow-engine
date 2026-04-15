@@ -22,6 +22,8 @@ resource "aws_lambda_function" "router" {
       SECURITY_GROUP_IDS = jsonencode([aws_security_group.agent_tasks.id])
       BUCKET_NAME        = aws_s3_bucket.workflows.id
       CONTAINER_NAME     = "agent"
+      AGENT_RUNTIME      = var.agent_runtime
+      LLM_MODEL          = var.llm_model
     }
   }
 }

@@ -74,11 +74,11 @@ def list_keys(s3, prefix):
     return keys
 
 
-def test_passed(name):
+def _passed(name):
     print(f"  PASS  {name}")
 
 
-def test_failed(name, detail=""):
+def _failed(name, detail=""):
     print(f"  FAIL  {name}")
     if detail:
         print(f"        {detail}")
@@ -106,9 +106,9 @@ def main():
                 s3.delete_object(Bucket=BUCKET, Key=key)
         except Exception:
             s3.create_bucket(Bucket=BUCKET)
-        test_passed("Connected to MinIO, bucket ready")
+        _passed("Connected to MinIO, bucket ready")
     except Exception as e:
-        test_failed("MinIO connection", str(e))
+        _failed("MinIO connection", str(e))
 
     # ------------------------------------------------------------------
     # Test 2: Seed manifest
@@ -129,7 +129,7 @@ def main():
     readback = get_json(s3, f"{PREFIX}/manifest.json")
     assert readback["run_id"] == "test_run_001"
     assert readback["steps"][0]["status"] == "pending"
-    test_passed("Manifest written and read back")
+    _passed("Manifest written and read back")
 
     # ------------------------------------------------------------------
     # Test 3: State transition pending -> running
@@ -139,7 +139,7 @@ def main():
     put_json(s3, f"{PREFIX}/manifest.json", manifest)
     readback = get_json(s3, f"{PREFIX}/manifest.json")
     assert readback["steps"][0]["status"] == "running"
-    test_passed("Step 0 marked as running")
+    _passed("Step 0 marked as running")
 
     # ------------------------------------------------------------------
     # Test 4: Simulate agent output (step 0 produces files)
@@ -149,7 +149,7 @@ def main():
     put_file(s3, f"{PREFIX}/step_0/output/company_data.json", json.dumps({"revenue": 100_000_000}))
     output_keys = list_keys(s3, f"{PREFIX}/step_0/output/")
     assert len(output_keys) == 2
-    test_passed(f"Step 0 produced {len(output_keys)} output files")
+    _passed(f"Step 0 produced {len(output_keys)} output files")
 
     # ------------------------------------------------------------------
     # Test 5: Context accumulation
@@ -167,7 +167,7 @@ def main():
     readback = get_json(s3, f"{PREFIX}/context.json")
     assert "step_0" in readback
     assert readback["step_0"]["agent"] == "sales"
-    test_passed("Context written with step 0 results")
+    _passed("Context written with step 0 results")
 
     # ------------------------------------------------------------------
     # Test 6: File handover (copy step 0 outputs to step 1 inputs)
@@ -185,7 +185,7 @@ def main():
     # Verify content survived the copy
     profile = get_file(s3, f"{PREFIX}/step_1/input/company_profile.md")
     assert "TestCorp" in profile
-    test_passed(f"Copied {len(input_keys)} files to step 1 input")
+    _passed(f"Copied {len(input_keys)} files to step 1 input")
 
     # ------------------------------------------------------------------
     # Test 7: Advance manifest to step 1
@@ -199,7 +199,7 @@ def main():
     assert readback["current_step"] == 1
     assert readback["steps"][0]["status"] == "complete"
     assert readback["steps"][1]["status"] == "pending"
-    test_passed("Manifest advanced to step 1")
+    _passed("Manifest advanced to step 1")
 
     # ------------------------------------------------------------------
     # Test 8: Simulate step 1 completion and terminal state
@@ -212,7 +212,7 @@ def main():
     put_json(s3, f"{PREFIX}/manifest.json", manifest)
     readback = get_json(s3, f"{PREFIX}/manifest.json")
     assert readback["status"] == "complete"
-    test_passed("Workflow marked complete")
+    _passed("Workflow marked complete")
 
     # ------------------------------------------------------------------
     # Test 9: Verify full bucket structure
@@ -235,8 +235,8 @@ def main():
     for ef in expected_files:
         full_key = f"{PREFIX}/{ef}"
         if full_key not in all_keys:
-            test_failed("Bucket structure", f"Missing: {ef}")
-    test_passed(f"All {len(expected_files)} expected files present")
+            _failed("Bucket structure", f"Missing: {ef}")
+    _passed(f"All {len(expected_files)} expected files present")
 
     # ------------------------------------------------------------------
     # Test 10: Error state simulation
@@ -262,7 +262,7 @@ def main():
     readback = get_json(s3, f"{error_prefix}/manifest.json")
     assert readback["status"] == "failed"
     assert "error" in readback["steps"][0]
-    test_passed("Error state recorded correctly")
+    _passed("Error state recorded correctly")
 
     # ------------------------------------------------------------------
     # Summary

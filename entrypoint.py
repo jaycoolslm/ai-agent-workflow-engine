@@ -110,11 +110,14 @@ def _create_runtime() -> AgentRuntimeProtocol:
         model = os.environ.get("LLM_MODEL", "")
         return get_runtime("deepagent", model=model)
     if AGENT_RUNTIME == "codex":
-        return get_runtime("codex")
+        model = os.environ.get("CODEX_MODEL", os.environ.get("LLM_MODEL", "gpt-4.1"))
+        return get_runtime("codex", model=model)
     if AGENT_RUNTIME == "openharness":
         model = os.environ.get("LLM_MODEL", "gpt-4o")
         provider = os.environ.get("OPENHARNESS_PROVIDER", "openai")
         return get_runtime("openharness", model=model, provider=provider)
+    if AGENT_RUNTIME == "echo":
+        return get_runtime("echo")
     raise ValueError(f"Unknown AGENT_RUNTIME: {AGENT_RUNTIME}")
 
 
@@ -127,6 +130,9 @@ async def main():
         sys.exit(1)
     if AGENT_RUNTIME == "claude" and not os.environ.get("ANTHROPIC_API_KEY"):
         print("ERROR: ANTHROPIC_API_KEY is required for claude runtime")
+        sys.exit(1)
+    if AGENT_RUNTIME == "codex" and not os.environ.get("OPENAI_API_KEY"):
+        print("ERROR: OPENAI_API_KEY is required for codex runtime")
         sys.exit(1)
     if not BUCKET or not RUN_PREFIX:
         print("ERROR: BUCKET and RUN_PREFIX are required")

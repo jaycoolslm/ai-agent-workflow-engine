@@ -48,6 +48,8 @@ resource "aws_ecs_task_definition" "agent" {
         { name = "STORAGE_BACKEND", value = "s3" },
         { name = "S3_ENDPOINT", value = "" },
         { name = "BUCKET", value = local.bucket_name },
+        { name = "AGENT_RUNTIME", value = var.agent_runtime },
+        { name = "LLM_MODEL", value = var.llm_model },
       ]
 
       # PLUGIN_NAME and RUN_PREFIX are passed as overrides in run_task()
@@ -58,6 +60,10 @@ resource "aws_ecs_task_definition" "agent" {
         {
           name      = "ANTHROPIC_API_KEY"
           valueFrom = aws_secretsmanager_secret.anthropic_api_key.arn
+        },
+        {
+          name      = "OPENAI_API_KEY"
+          valueFrom = aws_secretsmanager_secret.openai_api_key.arn
         },
       ]
 

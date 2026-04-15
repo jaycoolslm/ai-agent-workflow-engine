@@ -40,6 +40,9 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "")
 # Your Anthropic API key
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# Your OpenAI API key (for Codex runtime)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
 
 def get_s3_client():
     return boto3.client(
@@ -99,6 +102,7 @@ def launch_agent_container(
         "-e", f"AWS_SECRET_ACCESS_KEY={MINIO_SECRET_KEY}",
         "-e", f"AWS_DEFAULT_REGION=us-east-1",
         "-e", f"ANTHROPIC_API_KEY={ANTHROPIC_API_KEY}",
+        "-e", f"OPENAI_API_KEY={OPENAI_API_KEY}",
         "-e", f"AGENT_RUNTIME={AGENT_RUNTIME}",
         "-e", f"LLM_MODEL={LLM_MODEL}",
         AGENT_IMAGE,
@@ -207,6 +211,10 @@ def main():
             sys.exit(1)
         elif AGENT_RUNTIME == "deepagent" and (not LLM_MODEL or "anthropic" in LLM_MODEL):
             print("WARNING: ANTHROPIC_API_KEY not set. Required if using an Anthropic model with deepagent runtime.")
+
+    if AGENT_RUNTIME == "codex" and not OPENAI_API_KEY:
+        print("ERROR: Set OPENAI_API_KEY environment variable (required for codex runtime)")
+        sys.exit(1)
 
     s3 = get_s3_client()
 

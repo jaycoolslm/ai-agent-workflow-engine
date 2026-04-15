@@ -46,6 +46,16 @@ resource "google_cloud_run_v2_job" "agent" {
           }
         }
 
+        env {
+          name = "OPENAI_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.openai_api_key.secret_id
+              version = "latest"
+            }
+          }
+        }
+
         resources {
           limits = {
             cpu    = var.container_cpu

@@ -28,8 +28,18 @@ resource "time_sleep" "wait_for_rbac" {
 }
 
 resource "azurerm_key_vault_secret" "anthropic_api_key" {
+  count        = var.anthropic_api_key != "" ? 1 : 0
   name         = "anthropic-api-key"
   value        = var.anthropic_api_key
+  key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [time_sleep.wait_for_rbac]
+}
+
+resource "azurerm_key_vault_secret" "openai_api_key" {
+  count        = var.openai_api_key != "" ? 1 : 0
+  name         = "openai-api-key"
+  value        = var.openai_api_key
   key_vault_id = azurerm_key_vault.main.id
 
   depends_on = [time_sleep.wait_for_rbac]

@@ -25,11 +25,11 @@ from evaluation import OutputEvaluator, evaluate_workflow_outputs
 from storage.nfs import NFSStorage
 
 
-def test_passed(name):
+def _passed(name):
     print(f"  PASS  {name}")
 
 
-def test_failed(name, detail=""):
+def _failed(name, detail=""):
     print(f"  FAIL  {name}")
     if detail:
         print(f"        {detail}")
@@ -68,7 +68,7 @@ def main():
 
         assert result.passed, f"Should pass, got score={result.score}, issues={result.issues}"
         assert result.score >= 0.7
-        test_passed(f"Good output scored {result.score:.2f}")
+        _passed(f"Good output scored {result.score:.2f}")
 
     # ------------------------------------------------------------------
     # Test 2: Empty output fails
@@ -81,7 +81,7 @@ def main():
     )
     assert not result.passed
     assert result.score <= 0.6
-    test_passed(f"Empty output scored {result.score:.2f} (correctly failed)")
+    _passed(f"Empty output scored {result.score:.2f} (correctly failed)")
 
     # ------------------------------------------------------------------
     # Test 3: Hallucination detection
@@ -99,7 +99,7 @@ def main():
     )
     assert len(result.issues) > 0
     assert any("uncertainty" in i.lower() or "fabricated" in i.lower() for i in result.issues)
-    test_passed(f"Detected {len(result.issues)} issues in hallucinatory output")
+    _passed(f"Detected {len(result.issues)} issues in hallucinatory output")
 
     # ------------------------------------------------------------------
     # Test 4: Invalid JSON detection
@@ -117,7 +117,7 @@ def main():
             output_dir=output_dir,
         )
         assert any("Invalid JSON" in i for i in result.issues)
-        test_passed("Detected invalid JSON file")
+        _passed("Detected invalid JSON file")
 
     # ------------------------------------------------------------------
     # Test 5: Workflow-level evaluation with NFS storage
@@ -181,7 +181,7 @@ def main():
         assert 1 in results
         for step_idx, res in results.items():
             print(f"    Step {step_idx}: score={res['score']:.2f}, passed={res['passed']}")
-        test_passed("Workflow-level evaluation completed")
+        _passed("Workflow-level evaluation completed")
 
     finally:
         shutil.rmtree(mount_path, ignore_errors=True)

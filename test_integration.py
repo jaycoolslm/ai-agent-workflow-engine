@@ -28,11 +28,11 @@ from runtime.factory import get_runtime
 from runtime.openharness import OpenHarnessRuntime
 
 
-def test_passed(name):
+def _passed(name):
     print(f"  PASS  {name}")
 
 
-def test_failed(name, detail=""):
+def _failed(name, detail=""):
     print(f"  FAIL  {name}")
     if detail:
         print(f"        {detail}")
@@ -59,9 +59,9 @@ def main():
 
             # S3 would need MinIO running, just test the factory path
             # GCS/Azure would need emulators, just verify factory doesn't crash on import
-            test_passed("NFS backend available via factory")
+            _passed("NFS backend available via factory")
         except Exception as e:
-            test_failed("Storage factory", str(e))
+            _failed("Storage factory", str(e))
 
         # ------------------------------------------------------------------
         # Test 2: Runtime factory — all backends
@@ -70,9 +70,9 @@ def main():
         try:
             oh = get_runtime("openharness", model="gpt-4o", provider="openai")
             assert isinstance(oh, OpenHarnessRuntime)
-            test_passed("OpenHarness runtime available via factory")
+            _passed("OpenHarness runtime available via factory")
         except Exception as e:
-            test_failed("Runtime factory", str(e))
+            _failed("Runtime factory", str(e))
 
         # ------------------------------------------------------------------
         # Test 3: Full workflow simulation with NFS
@@ -136,7 +136,7 @@ def main():
         assert len(input_keys) == 2
         data = storage.read_json(f"{prefix}/step_1/input/data.json")
         assert data["revenue"] == 500_000_000
-        test_passed("Full 2-step workflow simulation with NFS handover")
+        _passed("Full 2-step workflow simulation with NFS handover")
 
         # ------------------------------------------------------------------
         # Test 4: OpenHarness script generation with skills
@@ -168,7 +168,7 @@ def main():
             assert "audit-support" in script
             assert "Research companies thoroughly" in script
             assert "maxSteps: 15" in script
-            test_passed("Skills injected into OpenHarness runner script")
+            _passed("Skills injected into OpenHarness runner script")
 
         # ------------------------------------------------------------------
         # Test 5: NFS path traversal protection
@@ -176,9 +176,9 @@ def main():
         print("\n[5] Security: NFS path traversal protection")
         try:
             storage.read_json("../../etc/passwd")
-            test_failed("Path traversal", "Should have been blocked")
+            _failed("Path traversal", "Should have been blocked")
         except ValueError:
-            test_passed("Path traversal blocked")
+            _passed("Path traversal blocked")
 
         # ------------------------------------------------------------------
         # Test 6: NFS symlink optimization
@@ -191,7 +191,7 @@ def main():
             )
             symlinked_data = storage.read_json(f"{prefix}/step_2/input/data.json")
             assert symlinked_data["revenue"] == 500_000_000
-            test_passed("Symlink zero-copy handover works")
+            _passed("Symlink zero-copy handover works")
         except OSError as e:
             print(f"  SKIP  Symlink: {e}")
 
@@ -204,13 +204,13 @@ def main():
             oh_rt = get_runtime("openharness", model="gpt-4o", provider="anthropic")
             assert type(claude_rt).__name__ == "ClaudeSDKRuntime"
             assert type(oh_rt).__name__ == "OpenHarnessRuntime"
-            test_passed("Claude + OpenHarness runtimes coexist")
+            _passed("Claude + OpenHarness runtimes coexist")
         except ImportError:
             # claude-agent-sdk may not be installed locally
             print("  SKIP  Claude SDK not installed, testing OpenHarness only")
             oh_rt = get_runtime("openharness", model="gpt-4o", provider="openai")
             assert isinstance(oh_rt, OpenHarnessRuntime)
-            test_passed("OpenHarness runtime works standalone")
+            _passed("OpenHarness runtime works standalone")
 
         # ------------------------------------------------------------------
         # Summary

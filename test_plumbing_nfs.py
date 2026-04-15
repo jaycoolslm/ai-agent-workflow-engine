@@ -25,11 +25,11 @@ BUCKET = "test-workflows"
 PREFIX = "runs/test_run_001"
 
 
-def test_passed(name):
+def _passed(name):
     print(f"  PASS  {name}")
 
 
-def test_failed(name, detail=""):
+def _failed(name, detail=""):
     print(f"  FAIL  {name}")
     if detail:
         print(f"        {detail}")
@@ -53,9 +53,9 @@ def main():
         print("[1] NFS Storage initialization")
         try:
             storage = NFSStorage(bucket=BUCKET, mount_path=mount_path)
-            test_passed("NFSStorage created successfully")
+            _passed("NFSStorage created successfully")
         except Exception as e:
-            test_failed("NFSStorage creation", str(e))
+            _failed("NFSStorage creation", str(e))
 
         # ------------------------------------------------------------------
         # Test 2: Seed manifest
@@ -76,7 +76,7 @@ def main():
         readback = storage.read_json(f"{PREFIX}/manifest.json")
         assert readback["run_id"] == "test_run_001"
         assert readback["steps"][0]["status"] == "pending"
-        test_passed("Manifest written and read back via NFS")
+        _passed("Manifest written and read back via NFS")
 
         # ------------------------------------------------------------------
         # Test 3: State transition pending -> running
@@ -86,7 +86,7 @@ def main():
         storage.write_json(f"{PREFIX}/manifest.json", manifest)
         readback = storage.read_json(f"{PREFIX}/manifest.json")
         assert readback["steps"][0]["status"] == "running"
-        test_passed("Step 0 marked as running")
+        _passed("Step 0 marked as running")
 
         # ------------------------------------------------------------------
         # Test 4: Simulate agent output (step 0 produces files)
@@ -102,7 +102,7 @@ def main():
         )
         output_keys = storage.list_keys(f"{PREFIX}/step_0/output")
         assert len(output_keys) == 2
-        test_passed(f"Step 0 produced {len(output_keys)} output files")
+        _passed(f"Step 0 produced {len(output_keys)} output files")
 
         # ------------------------------------------------------------------
         # Test 5: Context accumulation
@@ -120,7 +120,7 @@ def main():
         readback = storage.read_json(f"{PREFIX}/context.json")
         assert "step_0" in readback
         assert readback["step_0"]["agent"] == "sales"
-        test_passed("Context written with step 0 results")
+        _passed("Context written with step 0 results")
 
         # ------------------------------------------------------------------
         # Test 6: File handover (NFS copy - the KEY optimization)
@@ -135,7 +135,7 @@ def main():
         # Verify content survived the copy
         profile = storage.read_bytes(f"{PREFIX}/step_1/input/company_profile.md")
         assert b"TestCorp" in profile
-        test_passed(f"Copied {len(input_keys)} files via NFS (no S3 round-trip)")
+        _passed(f"Copied {len(input_keys)} files via NFS (no S3 round-trip)")
 
         # ------------------------------------------------------------------
         # Test 7: Advance manifest to step 1
@@ -149,7 +149,7 @@ def main():
         assert readback["current_step"] == 1
         assert readback["steps"][0]["status"] == "complete"
         assert readback["steps"][1]["status"] == "pending"
-        test_passed("Manifest advanced to step 1")
+        _passed("Manifest advanced to step 1")
 
         # ------------------------------------------------------------------
         # Test 8: Terminal state: workflow complete
@@ -162,7 +162,7 @@ def main():
         storage.write_json(f"{PREFIX}/manifest.json", manifest)
         readback = storage.read_json(f"{PREFIX}/manifest.json")
         assert readback["status"] == "complete"
-        test_passed("Workflow marked complete")
+        _passed("Workflow marked complete")
 
         # ------------------------------------------------------------------
         # Test 9: Symlink optimization (zero-copy handover)
@@ -178,7 +178,7 @@ def main():
                 f"{PREFIX}/step_2_symlinked/input/company_profile.md"
             )
             assert b"TestCorp" in profile_via_link
-            test_passed("Symlink handover works (true zero-copy)")
+            _passed("Symlink handover works (true zero-copy)")
         except OSError as e:
             # Symlinks may not work on all platforms (e.g., Windows without admin)
             print(f"  SKIP  Symlink test: {e}")
@@ -203,7 +203,7 @@ def main():
             storage.upload_dir_to_prefix(local_dir, upload_prefix)
             reuploaded_keys = storage.list_keys(upload_prefix)
             assert len(reuploaded_keys) == 2
-            test_passed("Download/upload round-trip successful")
+            _passed("Download/upload round-trip successful")
 
         # ------------------------------------------------------------------
         # Test 11: key_exists
@@ -211,7 +211,7 @@ def main():
         print("\n[11] Key existence check")
         assert storage.key_exists(f"{PREFIX}/manifest.json")
         assert not storage.key_exists(f"{PREFIX}/nonexistent.json")
-        test_passed("key_exists works correctly")
+        _passed("key_exists works correctly")
 
         # ------------------------------------------------------------------
         # Test 12: Path traversal protection
@@ -219,9 +219,9 @@ def main():
         print("\n[12] Path traversal protection")
         try:
             storage.read_json("../../etc/passwd")
-            test_failed("Path traversal", "Should have raised ValueError")
+            _failed("Path traversal", "Should have raised ValueError")
         except ValueError:
-            test_passed("Path traversal blocked correctly")
+            _passed("Path traversal blocked correctly")
 
         # ------------------------------------------------------------------
         # Test 13: Verify final bucket structure
@@ -235,7 +235,7 @@ def main():
 
         expected_count = 6  # manifest, context, step_0 outputs, step_1 inputs
         assert len([k for k in all_keys if not "symlinked" in k and not "step_99" in k]) >= expected_count
-        test_passed(f"NFS directory structure matches expectation")
+        _passed(f"NFS directory structure matches expectation")
 
         # ------------------------------------------------------------------
         # Summary

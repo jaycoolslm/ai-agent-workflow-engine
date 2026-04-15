@@ -20,6 +20,26 @@ variable "anthropic_api_key" {
   description = "Anthropic API key for Claude Agent SDK"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  description = "OpenAI API key for Codex runtime"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "agent_runtime" {
+  description = "Agent runtime to use (claude, deepagent, codex, openharness)"
+  type        = string
+  default     = "claude"
+}
+
+variable "llm_model" {
+  description = "LLM model override (leave empty for default)"
+  type        = string
+  default     = ""
 }
 
 variable "agent_image_tag" {
