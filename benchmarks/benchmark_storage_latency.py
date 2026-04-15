@@ -7,7 +7,7 @@ measures the full "handover" latency (write + read) for each storage mode.
 
 Outputs:
   - Beautiful CLI table with Time Saved (ms) and Percentage Speedup.
-  - PERFORMANCE_REPORT.md — executive summary + benchmark data.
+  - benchmarks/PERFORMANCE_REPORT.md — executive summary + benchmark data.
 
 Requirements:
   - MinIO running on localhost:9000 (for Boto3Storage tests).
@@ -31,7 +31,7 @@ from pathlib import Path
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from storage_provider import Boto3Storage, DirectMountStorage
+from storage.provider import Boto3Storage, DirectMountStorage
 
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from storage_provider import Boto3Storage, DirectMountStorage
+from storage.provider import Boto3Storage, DirectMountStorage
 
 
 # ---------------------------------------------------------------------------

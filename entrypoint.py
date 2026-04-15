@@ -18,7 +18,7 @@ from pathlib import Path
 
 from storage import get_storage
 from storage.protocol import StorageProtocol
-from storage_provider import get_storage_provider, StorageProvider
+from storage.provider import get_storage_provider, StorageProvider
 from runtime import get_runtime
 from runtime.protocol import AgentRuntimeProtocol
 

@@ -34,15 +34,22 @@ workflow-engine/
 │   └── package.json            # @openharness/core + AI SDK providers
 ├── skills/                     # Agent skill definitions (SKILL.md format)
 ├── infra/                      # Cloud deployment (AWS/Azure/GCP Terraform)
-├── test_plumbing.py            # S3 plumbing test (MinIO)
-├── test_plumbing_nfs.py        # [NEW] NFS storage backend test
-├── test_openharness_runtime.py # [NEW] OpenHarness runtime test
-├── test_evaluation.py          # [NEW] AI evaluation module test
-├── test_integration.py         # [NEW] Full integration test
-├── storage_provider.py          # [NEW] Boto3Storage vs DirectMountStorage abstraction
-├── benchmark_s3_vs_nfs.py      # [NEW] S3 vs NFS performance benchmark
-├── generate_benchmark_plots.py # [NEW] Chart generator (outputs benchmark_chart.png)
-├── benchmark_chart.png         # [NEW] Auto-generated performance chart
+├── tests/                      # All test suites
+│   ├── conftest.py             # pytest path setup
+│   ├── test_plumbing.py        # S3 plumbing test (MinIO)
+│   ├── test_plumbing_nfs.py    # NFS storage backend test
+│   ├── test_openharness_runtime.py  # OpenHarness runtime test
+│   ├── test_evaluation.py      # AI evaluation module test
+│   └── test_integration.py     # Full integration test
+├── benchmarks/                 # Performance benchmarks
+│   ├── benchmark_s3_vs_nfs.py  # S3 vs NFS latency benchmark
+│   ├── benchmark_storage_latency.py  # Detailed latency report generator
+│   ├── generate_benchmark_plots.py   # Chart generator
+│   ├── benchmark_chart.png     # Auto-generated performance chart
+│   └── PERFORMANCE_REPORT.md   # Executive benchmark summary
+├── storage/
+│   ├── provider.py             # Boto3Storage vs DirectMountStorage abstraction
+│   └── ...                     # s3.py, gcs.py, azure.py, nfs.py, factory.py
 ├── sample-manifest.json        # Example 2-step workflow
 └── README.md                   # You are here
 ```
@@ -90,31 +97,36 @@ Agent A → write to /mnt/s3/step_0/output/ → Agent B reads /mnt/s3/step_1/inp
 
 ## Step 1: Run Tests (No API Key Needed)
 
+### Run all tests
+```bash
+pytest tests/
+```
+
 ### NFS Storage Test (no Docker needed)
 ```bash
-python test_plumbing_nfs.py
+pytest tests/test_plumbing_nfs.py
 ```
 
 ### OpenHarness Runtime Test (no Docker needed)
 ```bash
-python test_openharness_runtime.py
+pytest tests/test_openharness_runtime.py
 ```
 
 ### AI Evaluation Test (no Docker needed)
 ```bash
-python test_evaluation.py
+pytest tests/test_evaluation.py
 ```
 
 ### Full Integration Test (no Docker needed)
 ```bash
-python test_integration.py
+pytest tests/test_integration.py
 ```
 
 ### Original S3 Plumbing Test (needs MinIO)
 ```bash
 docker compose up minio -d
 pip install boto3
-python test_plumbing.py
+pytest tests/test_plumbing.py
 ```
 
 ## Step 2: Build the Agent Image
@@ -192,7 +204,7 @@ Step 0 writes /mnt/s3/step_0/output/ → shutil.copy → Step 1 reads /mnt/s3/st
                                    1 local filesystem op
 ```
 
-The `storage_provider.py` abstraction layer provides two interchangeable backends:
+The `storage/provider.py` abstraction layer provides two interchangeable backends:
 
 | Backend | Class | How It Works | When to Use |
 |---------|-------|-------------|-------------|
@@ -212,18 +224,18 @@ STORAGE_MODE=s3            # Uses Boto3Storage (default)
 docker compose up minio -d
 
 # Run benchmark (default: 1, 5, 25 MB files, 3 iterations each)
-python benchmark_s3_vs_nfs.py
+python benchmarks/benchmark_s3_vs_nfs.py
 
 # Custom sizes and iterations
-python benchmark_s3_vs_nfs.py --sizes 1 5 25 50 100 --iterations 5
+python benchmarks/benchmark_s3_vs_nfs.py --sizes 1 5 25 50 100 --iterations 5
 
-# Generate performance charts (saves benchmark_chart.png)
-python generate_benchmark_plots.py
+# Generate performance charts (saves benchmarks/benchmark_chart.png)
+python benchmarks/generate_benchmark_plots.py
 ```
 
 ### Performance Chart
 
-![S3 vs NFS Benchmark Chart](benchmark_chart.png)
+![S3 vs NFS Benchmark Chart](benchmarks/benchmark_chart.png)
 
 ### Expected Results
 

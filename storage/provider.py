@@ -13,7 +13,7 @@ implementations:
     the S3 bucket is presented as a POSIX path with zero-copy handover.
 
 Usage:
-    from storage_provider import get_storage_provider
+    from storage.provider import get_storage_provider
 
     provider = get_storage_provider()          # reads STORAGE_MODE env
     provider.upload_file(local_path, "runs/run_001/step_0/output/report.md")
