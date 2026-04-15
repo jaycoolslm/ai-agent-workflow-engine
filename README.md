@@ -41,6 +41,8 @@ workflow-engine/
 ├── test_integration.py         # [NEW] Full integration test
 ├── storage_provider.py          # [NEW] Boto3Storage vs DirectMountStorage abstraction
 ├── benchmark_s3_vs_nfs.py      # [NEW] S3 vs NFS performance benchmark
+├── generate_benchmark_plots.py # [NEW] Chart generator (outputs benchmark_chart.png)
+├── benchmark_chart.png         # [NEW] Auto-generated performance chart
 ├── sample-manifest.json        # Example 2-step workflow
 └── README.md                   # You are here
 ```
@@ -214,7 +216,14 @@ python benchmark_s3_vs_nfs.py
 
 # Custom sizes and iterations
 python benchmark_s3_vs_nfs.py --sizes 1 5 25 50 100 --iterations 5
+
+# Generate performance charts (saves benchmark_chart.png)
+python generate_benchmark_plots.py
 ```
+
+### Performance Chart
+
+![S3 vs NFS Benchmark Chart](benchmark_chart.png)
 
 ### Expected Results
 
