@@ -1,6 +1,5 @@
 # =============================================================================
-# PHASE 1: Loose permissions to validate e2e pipeline.
-# Every broad policy is marked with "PHASE 2: tighten" for scoping down later.
+# PHASE 2: Least-privilege IAM — every policy scoped to specific resources.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -36,28 +35,34 @@ resource "aws_iam_policy" "lambda_custom" {
       {
         Sid    = "S3Access"
         Effect = "Allow"
-        # PHASE 2: tighten to ["s3:GetObject", "s3:PutObject"]
-        Action   = "s3:*"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket",
+          "s3:HeadObject",
+          "s3:CopyObject",
+        ]
         Resource = [
           aws_s3_bucket.workflows.arn,
           "${aws_s3_bucket.workflows.arn}/*",
         ]
       },
       {
-        Sid    = "ECSRunTask"
-        Effect = "Allow"
-        Action = "ecs:RunTask"
-        # PHASE 2: tighten to aws_ecs_task_definition.agent.arn (without revision)
-        Resource = "*"
+        Sid      = "ECSRunTask"
+        Effect   = "Allow"
+        Action   = "ecs:RunTask"
+        Resource = replace(aws_ecs_task_definition.agent.arn, "/:\\d+$/", ":*")
       },
       {
         Sid    = "PassRole"
         Effect = "Allow"
         Action = "iam:PassRole"
-        # PHASE 2: tighten to [aws_iam_role.ecs_execution.arn, aws_iam_role.ecs_task.arn]
-        Resource = "*"
+        Resource = [
+          aws_iam_role.ecs_execution.arn,
+          aws_iam_role.ecs_task.arn,
+        ]
         Condition = {
-          StringLike = {
+          StringEquals = {
             "iam:PassedToService" = "ecs-tasks.amazonaws.com"
           }
         }
@@ -104,8 +109,10 @@ resource "aws_iam_policy" "ecs_execution_secrets" {
       Sid    = "SecretsAccess"
       Effect = "Allow"
       Action = "secretsmanager:GetSecretValue"
-      # PHASE 2: tighten to [aws_secretsmanager_secret.anthropic_api_key.arn]
-      Resource = "*"
+      Resource = [
+        aws_secretsmanager_secret.anthropic_api_key.arn,
+        aws_secretsmanager_secret.openai_api_key.arn,
+      ]
     }]
   })
 }
@@ -131,10 +138,31 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
-# PHASE 2: replace with custom policy scoped to workflow bucket only:
-# Actions: s3:GetObject, s3:PutObject, s3:ListBucket, s3:CopyObject, s3:HeadObject
-# Resource: [aws_s3_bucket.workflows.arn, "${aws_s3_bucket.workflows.arn}/*"]
+resource "aws_iam_policy" "ecs_task_s3" {
+  name        = "${var.project_name}-ecs-task-s3"
+  description = "ECS task role: scoped S3 access for workflow bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "WorkflowBucketAccess"
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket",
+        "s3:CopyObject",
+        "s3:HeadObject",
+      ]
+      Resource = [
+        aws_s3_bucket.workflows.arn,
+        "${aws_s3_bucket.workflows.arn}/*",
+      ]
+    }]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "ecs_task_s3" {
   role       = aws_iam_role.ecs_task.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  policy_arn = aws_iam_policy.ecs_task_s3.arn
 }

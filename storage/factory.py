@@ -10,11 +10,12 @@ def get_storage(backend: str, **kwargs) -> StorageProtocol:
     Create a storage backend instance.
 
     Args:
-        backend: One of "s3", "gcs", "azure".
+        backend: One of "s3", "gcs", "azure", "nfs".
         **kwargs: Backend-specific config passed to the constructor.
             s3:    bucket, endpoint_url, region
             gcs:   bucket, project
             azure: container, connection_string
+            nfs:   bucket, mount_path
     """
     if backend == "s3":
         from storage.s3 import S3Storage
@@ -28,4 +29,8 @@ def get_storage(backend: str, **kwargs) -> StorageProtocol:
         from storage.azure import AzureBlobStorage
         return AzureBlobStorage(**kwargs)
 
-    raise ValueError(f"Unknown storage backend: '{backend}'. Use 's3', 'gcs', or 'azure'.")
+    if backend == "nfs":
+        from storage.nfs import NFSStorage
+        return NFSStorage(**kwargs)
+
+    raise ValueError(f"Unknown storage backend: '{backend}'. Use 's3', 'gcs', 'azure', or 'nfs'.")

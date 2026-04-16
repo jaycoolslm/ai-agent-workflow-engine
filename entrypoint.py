@@ -18,6 +18,7 @@ from pathlib import Path
 
 from storage import get_storage
 from storage.protocol import StorageProtocol
+from storage.provider import get_storage_provider, StorageProvider
 from runtime import get_runtime
 from runtime.protocol import AgentRuntimeProtocol
 
@@ -28,9 +29,11 @@ BUCKET = os.environ.get("BUCKET", "")
 RUN_PREFIX = os.environ.get("RUN_PREFIX", "")
 PLUGIN_NAME = os.environ.get("PLUGIN_NAME", "")
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "s3")
+STORAGE_MODE = os.environ.get("STORAGE_MODE", "")  # 's3' or 'direct_mount'
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")  # e.g. http://minio:9000
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 AZURE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
+NFS_MOUNT_PATH = os.environ.get("NFS_MOUNT_PATH", "/mnt/s3")  # S3 Files NFS mount
 AGENT_RUNTIME = os.environ.get("AGENT_RUNTIME", "claude")
 SKILLS_ROOT = Path("/opt/skills")
 WORKSPACE = Path("/workspace")
@@ -94,7 +97,26 @@ def _create_storage() -> StorageProtocol:
         return get_storage("gcs", bucket=BUCKET, project=GCP_PROJECT)
     if STORAGE_BACKEND == "azure":
         return get_storage("azure", container=BUCKET, connection_string=AZURE_CONNECTION_STRING)
+    if STORAGE_BACKEND == "nfs":
+        return get_storage("nfs", bucket=BUCKET, mount_path=NFS_MOUNT_PATH)
     raise ValueError(f"Unknown STORAGE_BACKEND: {STORAGE_BACKEND}")
+
+
+def _create_storage_provider() -> StorageProvider | None:
+    """Create an optional StorageProvider for file-level operations.
+
+    When STORAGE_MODE is set (e.g. 'direct_mount'), this returns a
+    high-performance provider that bypasses the boto3 API pipeline. When
+    unset, returns None and the classic StorageProtocol path is used.
+    """
+    if not STORAGE_MODE:
+        return None
+    return get_storage_provider(
+        mode=STORAGE_MODE,
+        bucket=BUCKET,
+        endpoint_url=S3_ENDPOINT,
+        mount_path=NFS_MOUNT_PATH,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +129,14 @@ def _create_runtime() -> AgentRuntimeProtocol:
         model = os.environ.get("LLM_MODEL", "")
         return get_runtime("deepagent", model=model)
     if AGENT_RUNTIME == "codex":
-        return get_runtime("codex")
+        model = os.environ.get("CODEX_MODEL", os.environ.get("LLM_MODEL", "gpt-4.1"))
+        return get_runtime("codex", model=model)
+    if AGENT_RUNTIME == "openharness":
+        model = os.environ.get("LLM_MODEL", "gpt-4o")
+        provider = os.environ.get("OPENHARNESS_PROVIDER", "openai")
+        return get_runtime("openharness", model=model, provider=provider)
+    if AGENT_RUNTIME == "echo":
+        return get_runtime("echo")
     raise ValueError(f"Unknown AGENT_RUNTIME: {AGENT_RUNTIME}")
 
 
@@ -121,11 +150,15 @@ async def main():
     if AGENT_RUNTIME == "claude" and not os.environ.get("ANTHROPIC_API_KEY"):
         print("ERROR: ANTHROPIC_API_KEY is required for claude runtime")
         sys.exit(1)
+    if AGENT_RUNTIME == "codex" and not os.environ.get("OPENAI_API_KEY"):
+        print("ERROR: OPENAI_API_KEY is required for codex runtime")
+        sys.exit(1)
     if not BUCKET or not RUN_PREFIX:
         print("ERROR: BUCKET and RUN_PREFIX are required")
         sys.exit(1)
 
     storage = _create_storage()
+    provider = _create_storage_provider()
     runtime = _create_runtime()
     skills_dir = resolve_skills_dir(PLUGIN_NAME)
 
@@ -133,6 +166,8 @@ async def main():
     print(f"Plugin:     {PLUGIN_NAME}")
     print(f"Runtime:    {AGENT_RUNTIME}")
     print(f"Backend:    {STORAGE_BACKEND}")
+    if STORAGE_MODE:
+        print(f"Mode:       {STORAGE_MODE} (StorageProvider)")
     print(f"Bucket:     {BUCKET}")
     print(f"Run prefix: {RUN_PREFIX}")
     if skills_dir:
@@ -176,7 +211,10 @@ async def main():
         d.mkdir(parents=True)
 
     step_input_prefix = f"{RUN_PREFIX}/step_{step_idx}/input"
-    storage.download_prefix_to_dir(step_input_prefix, input_dir)
+    if provider:
+        provider.download_prefix(step_input_prefix, input_dir)
+    else:
+        storage.download_prefix_to_dir(step_input_prefix, input_dir)
 
     # 4. Build prompt and run the agent
     prompt = build_prompt(step["instruction"], input_dir, output_dir, context)
@@ -190,7 +228,10 @@ async def main():
 
         # 5. Upload outputs
         step_output_prefix = f"{RUN_PREFIX}/step_{step_idx}/output"
-        storage.upload_dir_to_prefix(output_dir, step_output_prefix)
+        if provider:
+            provider.upload_dir(output_dir, step_output_prefix)
+        else:
+            storage.upload_dir_to_prefix(output_dir, step_output_prefix)
 
         # 6. Update shared context
         output_files = [
@@ -220,10 +261,12 @@ async def main():
                 inputs_from = [step_idx]
 
             for prior_idx in inputs_from:
-                storage.copy_prefix(
-                    f"{RUN_PREFIX}/step_{prior_idx}/output/",
-                    f"{RUN_PREFIX}/step_{next_idx}/input/",
-                )
+                src = f"{RUN_PREFIX}/step_{prior_idx}/output/"
+                dst = f"{RUN_PREFIX}/step_{next_idx}/input/"
+                if provider:
+                    provider.copy_prefix(src, dst)
+                else:
+                    storage.copy_prefix(src, dst)
         else:
             manifest["status"] = "complete"
             manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
