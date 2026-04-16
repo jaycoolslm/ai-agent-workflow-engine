@@ -26,6 +26,9 @@ import tempfile
 import time
 from pathlib import Path
 
+# Ensure project root is on sys.path when run from any directory
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError

@@ -156,7 +156,7 @@ def main():
     # Test 7: OpenHarness package.json exists
     # ------------------------------------------------------------------
     print("\n[7] OpenHarness package.json")
-    pkg_path = Path(__file__).parent / "openharness" / "package.json"
+    pkg_path = Path(__file__).parent.parent / "openharness" / "package.json"
     assert pkg_path.exists(), f"Missing {pkg_path}"
     import json
     pkg = json.loads(pkg_path.read_text())

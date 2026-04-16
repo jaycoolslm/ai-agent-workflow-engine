@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Ensure project root is importable
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from storage.provider import Boto3Storage, DirectMountStorage
 
